@@ -1,6 +1,7 @@
 import { BLEManager, BLEDevice } from '../common/BLEManager'
 import { NearLinkManager, NearLinkDevice } from '../common/NearLinkManager'
 import { common } from '@kit.AbilityKit'
+import { ConnectionType } from '../constants/BLEConstants'
 
 // BLE扫描弹窗
 @CustomDialog
@@ -272,6 +273,9 @@ export struct ControlPage {
   private resultDialogController: CustomDialogController | null = null
   private starflashDialogController: CustomDialogController | null = null
 
+  @State connectionType: ConnectionType = ConnectionType.None
+  @State connectedDeviceName: string = ''
+
   aboutToAppear(): void {
     this.connectionDialogController = new CustomDialogController({
       builder: ConnectionDialog({
@@ -285,12 +289,87 @@ export struct ControlPage {
       alignment: DialogAlignment.Center,
       backgroundColor: 0xFFFFFFFF
     })
+
+    // 设置 BLE 连接状态回调
+    this.bleManager.setConnectionCallback((connected: boolean, deviceId: string) => {
+      if (connected) {
+        this.connectionType = ConnectionType.BLE
+        this.connectedDeviceName = deviceId
+      } else {
+        if (this.connectionType === ConnectionType.BLE) {
+          this.connectionType = ConnectionType.None
+          this.connectedDeviceName = ''
+        }
+      }
+    })
+
+    // 设置星闪连接状态回调
+    this.nearLinkManager.setConnectionCallback((success: boolean, message: string) => {
+      if (success) {
+        this.connectionType = ConnectionType.NearLink
+        this.connectedDeviceName = '星闪设备'
+      }
+      this.showResult(success, message)
+    })
   }
 
   build() {
     Column() {
       // 顶部信息栏 - 白色背景
       Row() {
+        // 连接状态图标 - 点击可断开连接
+        if (this.connectionType === ConnectionType.BLE) {
+          Row() {
+            Image($r('app.media.ic_public_bluetooth'))
+              .width(18)
+              .height(18)
+              .margin({ right: 4 })
+            Text('已连接')
+              .fontSize(12)
+              .fontColor($r('app.color.primary'))
+            Image($r('app.media.ic_public_cancel'))
+              .width(14)
+              .height(14)
+              .margin({ left: 4 })
+              .fillColor('#999999')
+          }
+          .height(30)
+          .padding({ left: 10, right: 10 })
+          .borderRadius(15)
+          .backgroundColor('#E6F7FF')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .margin({ right: 8 })
+          .onClick(() => {
+            this.disconnectCurrent()
+          })
+        } else if (this.connectionType === ConnectionType.NearLink) {
+          Row() {
+            Image($r('app.media.ic_public_starflash'))
+              .width(18)
+              .height(18)
+              .margin({ right: 4 })
+            Text('已连接')
+              .fontSize(12)
+              .fontColor($r('app.color.primary'))
+            Image($r('app.media.ic_public_cancel'))
+              .width(14)
+              .height(14)
+              .margin({ left: 4 })
+              .fillColor('#999999')
+          }
+          .height(30)
+          .padding({ left: 10, right: 10 })
+          .borderRadius(15)
+          .backgroundColor('#FFF7E6')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .margin({ right: 8 })
+          .onClick(() => {
+            this.disconnectCurrent()
+          })
+        }
+
         Row() {
           Image($r('app.media.ic_public_link'))
             .width(18)
@@ -381,6 +460,12 @@ export struct ControlPage {
   }
 
   private startStarflashScan(deviceName: string): void {
+    // 互斥逻辑：如果当前已连接蓝牙，先断开
+    if (this.connectionType === ConnectionType.BLE) {
+      this.bleManager.disconnect()
+      this.bleManager.close()
+    }
+
     // 显示扫描提示
     this.showResult(true, `正在扫描: ${deviceName}`)
 
@@ -402,14 +487,37 @@ export struct ControlPage {
       this.bleScanDialogController = null
     }
 
+    // 互斥逻辑：如果当前已连接星闪，先断开
+    if (this.connectionType === ConnectionType.NearLink) {
+      this.nearLinkManager.disconnect()
+    }
+
     // 显示连接中
     this.showResult(true, '连接中...')
 
     // 连接设备
     const success: boolean = await this.bleManager.connect(device.deviceId)
 
-    // 显示结果
+    // 显示结果（连接状态会通过回调更新图标）
     this.showResult(success, success ? '连接成功' : '连接失败')
+  }
+
+  /**
+   * 断开当前连接
+   */
+  private disconnectCurrent(): void {
+    if (this.connectionType === ConnectionType.BLE) {
+      this.bleManager.disconnect()
+      this.bleManager.close()
+      this.connectionType = ConnectionType.None
+      this.connectedDeviceName = ''
+      this.showResult(true, '蓝牙已断开')
+    } else if (this.connectionType === ConnectionType.NearLink) {
+      this.nearLinkManager.disconnect()
+      this.connectionType = ConnectionType.None
+      this.connectedDeviceName = ''
+      this.showResult(true, '星闪已断开')
+    }
   }
 
   private showResult(isSuccess: boolean, message: string): void {
