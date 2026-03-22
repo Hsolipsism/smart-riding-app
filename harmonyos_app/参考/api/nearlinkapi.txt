@@ -12,6 +12,7 @@ PC/2in1
 Tablet
 TV
 Wearable
+
 import { ssap } from '@kit.NearLinkKit';
 ConnectionState
 Phone

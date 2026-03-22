@@ -227,6 +227,9 @@ export class NearLinkManager {
           Logger.info('NearLinkManager: Connected to device:', address)
         } else if (data.state === constant.ConnectionState.STATE_DISCONNECTED) {
           Logger.info('NearLinkManager: Disconnected from device:', address)
+          if (this.connectionCallback) {
+            this.connectionCallback(false, '星闪连接已断开')
+          }
         }
       })
 
